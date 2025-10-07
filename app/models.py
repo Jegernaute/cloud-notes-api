@@ -26,6 +26,7 @@ class Note(Base):
     id = Column(Integer, primary_key=True, index=True)   # Первинний ключ
     title = Column(String, nullable=False)               # Заголовок нотатки
     content = Column(Text, nullable=True)                # Текстовий вміст (може бути пустим)
+    file_url = Column(String, nullable=True)             # Зображення(посилання на supabase)
 
     # Зовнішній ключ
     user_id = Column(Integer, ForeignKey("users.id"))    # Прив’язка до користувача (users.id)

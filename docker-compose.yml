@@ -1,0 +1,30 @@
+
+
+services:
+  db:
+    image: postgres:16
+    container_name: cloudnotes_db
+    restart: always
+    environment:
+      POSTGRES_USER: cloudnotes_user
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: cloudnotes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    container_name: cloudnotes_api
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:

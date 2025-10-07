@@ -39,6 +39,7 @@ class NoteCreate(BaseModel):
     """
     title: str
     content: Optional[str] = None
+    file_url: Optional[str] = None
 
 class NoteOut(BaseModel):
     """
@@ -53,6 +54,7 @@ class NoteOut(BaseModel):
     title: str
     content: Optional[str] = None
     user_id: int
+    file_url: Optional[str] = None
 
     class Config:
         orm_mode = True  # Дозволяє Pydantic працювати з ORM-моделями SQLAlchemy
