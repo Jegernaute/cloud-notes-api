@@ -1,3 +1,5 @@
+import uuid
+from urllib.parse import urlparse, unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile # Для створення роутів, залежностей та обробки помилок
 from fastapi.params import Form
@@ -6,12 +8,13 @@ from sqlalchemy.orm import Session  # Для роботи з базою дани
 from typing import List, Optional  # Для вказівки типу списку у відповіді
 from app.database import get_db  # Функція для отримання сесії бази даних
 from app import models  # Моделі таблиць (User, Note)
-from app.routes.schemas import NoteCreate, NoteOut  # Pydantic-схеми для валідації вхідних та вихідних даних
+from app.routes.schemas import NoteOut  # Pydantic-схеми для валідації вхідних та вихідних даних
 from jose import jwt, JWTError  # Для роботи з JWT-токенами
 from app.services import storage
 
 # Створення роутера FastAPI для нотаток
 router = APIRouter(prefix="/notes", tags=["notes"])
+
 
 # Залежність: отримання поточного користувача
 def get_current_user(authorization: str = Header(...), db: Session = Depends(get_db)):
@@ -49,24 +52,6 @@ def get_current_user(authorization: str = Header(...), db: Session = Depends(get
 
 # CRUD нотаток
 
-# Створення нової нотатки
-@router.post("/", response_model=NoteOut)
-def create_note(
-    note: NoteCreate,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
-):
-    """
-    Створює нову нотатку для поточного користувача.
-    Вхід: Pydantic-схема NoteCreate.
-    Вихід: Pydantic-схема NoteOut з даними нотатки.
-    """
-    new_note = models.Note(title=note.title, content=note.content, owner=user)  # Створюємо екземпляр Note
-    db.add(new_note)  # Додаємо у сесію
-    db.commit()  # Фіксуємо зміни у базі даних
-    db.refresh(new_note)  # Оновлюємо екземпляр з даними з бази (наприклад, id)
-    return new_note
-
 # Отримання всіх нотаток користувача
 @router.get("/", response_model=List[NoteOut])
 def get_notes(
@@ -99,7 +84,7 @@ def get_note(
         raise HTTPException(status_code=404, detail="Note not found")
     return note
 
-# Видалення нотатки по ID
+# Видалення нотатки по ID разом з файлом у Supabase
 @router.delete("/{note_id}", status_code=204)
 def delete_note(
     note_id: int,
@@ -109,7 +94,7 @@ def delete_note(
     """
     Видаляє нотатку користувача за ID.
     Якщо нотатку не знайдено — повертає 404.
-    Статус-код 204 означає успішне видалення без тіла відповіді.
+    Файл з Supabase видаляється перед видаленням запису.
     """
     note = db.query(models.Note).filter(
         and_(
@@ -119,9 +104,27 @@ def delete_note(
     ).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+
+    #  Видалення файлу у Supabase (якщо є)
+    if note.file_url:
+        try:
+            parsed_path = urlparse(note.file_url).path  # /storage/v1/object/public/notes-files/2/UUID_filename.jpeg
+            # Беремо все після 'notes-files/' → '2/UUID_filename.jpeg'
+            idx = parsed_path.find("notes-files/")
+            if idx == -1:
+                raise HTTPException(status_code=500, detail="Invalid file_url format")
+            path_inside_bucket = parsed_path[idx + len("notes-files/"):]
+            path_inside_bucket = unquote(path_inside_bucket)  # Декодуємо %20 → пробіли
+            print(f"[DEBUG] Correct path to delete: '{path_inside_bucket}'")
+            storage.remove_file("notes-files", path_inside_bucket)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting file: {e}")
+
+    # Видалення запису у базі
     db.delete(note)
     db.commit()
     return
+
 
 
 @router.post("/upload", response_model=NoteOut)
@@ -134,17 +137,18 @@ def upload_note_file(
 ):
     """
     Завантаження нової нотатки з файлом у Supabase.
+    Використовує унікальні імена файлів, щоб уникнути помилки 409 Duplicate.
     """
     try:
         # Читаємо байти файлу
         file_bytes = file.file.read()
 
-        # Формуємо шлях у бакеті: user_id/назва_файлу
-        file_path = f"{user.id}/{file.filename}"
+        # Генеруємо унікальне ім'я файлу: user_id/UUID_оригінальна_назва
+
+        unique_filename = f"{user.id}/{uuid.uuid4()}_{file.filename}"
 
         # Завантажуємо файл у Supabase
-        file_url = storage.upload_file("notes-files", file_path, file_bytes)
-
+        file_url = storage.upload_file("notes-files", unique_filename, file_bytes)
 
         # Створюємо нову нотатку
         new_note = models.Note(
@@ -161,4 +165,5 @@ def upload_note_file(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 

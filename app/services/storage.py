@@ -16,3 +16,13 @@ def upload_file(bucket_name: str, file_name: str, data: bytes):
     return url
 
 
+def remove_file(bucket_name: str, file_path: str):
+    """
+    Видаляє файл із Supabase Storage.
+    file_path - шлях всередині бакета, без назви bucket_name
+    Наприклад: "2/uuid_filename.jpeg"
+    """
+    # Відправляємо як список
+    response = supabase.storage.from_(bucket_name).remove([file_path])
+    print("[DEBUG] Supabase remove response:", response)
+

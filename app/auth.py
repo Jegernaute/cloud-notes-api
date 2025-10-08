@@ -3,7 +3,7 @@
 # Імпорти основних залежностей
 import os                                 # Робота зі змінними середовища
 from datetime import datetime, timedelta  # Час для налаштування тривалості дії токенів
-from jose import JWTError, jwt            # Бібліотека для створення та перевірки JWT токенів
+from jose import jwt            # Бібліотека для створення та перевірки JWT токенів
 from passlib.hash import bcrypt  # Для безпечного хешування паролів
 from dotenv import load_dotenv            # Завантаження змінних середовища з .env файлу
 
